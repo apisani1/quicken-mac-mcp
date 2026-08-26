@@ -39,13 +39,13 @@ Plan 0 step 3 already staged the copy into the test account's home. If you
 followed it, the path is:
 
 ```bash
-export QUICKEN_DB_PATH="$HOME/quicken-test-copy.quicken/data"
+export QUICKEN_DB_PATH="$HOME/Documents/quicken-test-copy.quicken/data"
 ```
 
 Two reminders from plan 0, because everything below depends on them:
 
 - Quicken must be **running in the `quicken-test` session** with
-  `~/quicken-test-copy.quicken` open. Closed Quicken means an encrypted stub
+  `~/Documents/quicken-test-copy.quicken` open. Closed Quicken means an encrypted stub
   and every live suite fails.
 - Never point `QUICKEN_DB_PATH` at your original bundle. The tests open the
   database read-only, but Quicken itself will open and possibly upgrade
@@ -160,7 +160,7 @@ look at the message:
 ```bash
 # Point at a nonexistent file inside your real directory, so the error message
 # contains a genuine path with your real folder names in it.
-QUICKEN_DB_PATH="$HOME/quicken-test-copy.quicken/nonexistent" \
+QUICKEN_DB_PATH="$HOME/Documents/quicken-test-copy.quicken/nonexistent" \
   npx tsx src/index.ts list_accounts 2>&1 | tail -5
 ```
 

@@ -32,7 +32,7 @@ That is the specific thing this plan checks.
 Same live database setup as plan 1. If you are in a new shell:
 
 ```bash
-export QUICKEN_DB_PATH="$HOME/quicken-test-copy.quicken/data"
+export QUICKEN_DB_PATH="$HOME/Documents/quicken-test-copy.quicken/data"
 node scripts/report-live-test-status.mjs; echo "exit=$?"   # must be exit=0
 ```
 
@@ -87,7 +87,7 @@ npx tsx src/index.ts raw_query \
   --sql "SELECT * FROM ZTRANSACTION" 2>&1 | tail -5
 
 # An unreadable database, so the failure happens at open time.
-QUICKEN_DB_PATH="$HOME/quicken-test-copy.quicken/nonexistent" \
+QUICKEN_DB_PATH="$HOME/Documents/quicken-test-copy.quicken/nonexistent" \
   npx tsx src/index.ts raw_query --sql "SELECT 1" 2>&1 | tail -5
 ```
 

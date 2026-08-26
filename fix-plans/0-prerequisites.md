@@ -101,20 +101,30 @@ sudo chown -R quicken-test:staff /Users/Shared/quicken-test-copy.quicken
 **Then, logged in as `quicken-test`:**
 
 ```bash
-mv /Users/Shared/quicken-test-copy.quicken "$HOME/quicken-test-copy.quicken"
-chmod -R 700 "$HOME/quicken-test-copy.quicken"
-ls -ld "$HOME/quicken-test-copy.quicken"     # expect drwx------
+mkdir -p "$HOME/Documents"
+mv /Users/Shared/quicken-test-copy.quicken "$HOME/Documents/quicken-test-copy.quicken"
+chmod -R 700 "$HOME/Documents/quicken-test-copy.quicken"
+ls -ld "$HOME/Documents/quicken-test-copy.quicken"     # expect drwx------
 ```
 
 Three details that matter:
 
 - `/Users/Shared` is world-writable (`drwxrwxrwt`). Do not leave the copy
   there — the `mv` above is the point, not a formality.
-- Keep the copy at the **home root**, not in `~/Documents`. Documents, Desktop
-  and Downloads are TCC-protected, which triggers permission prompts for
-  Terminal and complicates the test run for no benefit.
+- The copy lives in the test account's `~/Documents`. That folder is
+  TCC-protected, so the first time Terminal (or `node`) reads it macOS will
+  prompt: *"Terminal would like to access files in your Documents folder."*
+  **Approve it.** This is a narrow, per-app, per-account grant — it is not
+  Full Disk Access, and it does not reach the administrator account.
 - Quicken needs to **write** to the bundle it opens, which is why ownership is
   transferred rather than just read access.
+
+One useful side effect: `~/Documents` is exactly where the tool's
+auto-detection looks for a `.quicken` bundle, so it will find this copy on its
+own. Set `QUICKEN_DB_PATH` explicitly anyway. With it set, an unusable
+database makes `npm test` **fail** (exit 1); with auto-detection alone, the
+live suites merely warn and skip — which is the silent-skip failure mode this
+whole effort exists to eliminate.
 
 Locating your original bundle has to happen from the account that owns it —
 `mdfind` run as `quicken-test` will not see the administrator's files. Plan 1
@@ -165,7 +175,7 @@ never copy `node_modules/` between accounts or volumes.
 ## Step 5 — Quicken, in the test account
 
 Launch Quicken while logged in as `quicken-test` and open
-`~/quicken-test-copy.quicken`.
+`~/Documents/quicken-test-copy.quicken`.
 
 - You will likely have to **sign in with your Quicken ID** in this account,
   since subscription state is per-user. That places Quicken credentials inside
@@ -191,7 +201,7 @@ node -v && npm -v && git --version && sqlite3 --version | head -1 \
 Then confirm the database copy is actually decrypted:
 
 ```bash
-export QUICKEN_DB_PATH="$HOME/quicken-test-copy.quicken/data"
+export QUICKEN_DB_PATH="$HOME/Documents/quicken-test-copy.quicken/data"
 sqlite3 "$QUICKEN_DB_PATH" ".tables" | tr ' ' '\n' | grep -c ZACCOUNT   # expect >= 1
 node scripts/report-live-test-status.mjs; echo "exit=$?"                # expect exit=0
 ```
@@ -220,7 +230,7 @@ the results of the manual checks in plan 1 and plan 2.
 The copy is real financial data. When testing is done:
 
 ```bash
-rm -rf "$HOME/quicken-test-copy.quicken"
+rm -rf "$HOME/Documents/quicken-test-copy.quicken"
 ```
 
 Keep the account itself if you expect a second round of testing; delete it
