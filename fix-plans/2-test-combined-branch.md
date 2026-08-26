@@ -35,7 +35,7 @@ That is the specific thing this plan checks.
 Same live database setup as plan 1. If you are in a new shell:
 
 ```bash
-export QUICKEN_DB_PATH="$HOME/Documents/quicken-test-copy.quicken/data"
+export QUICKEN_DB_PATH="$HOME/Documents/My Test Finances (2026).quicken/data"
 node scripts/report-live-test-status.mjs; echo "exit=$?"   # must be exit=0
 ```
 
@@ -73,6 +73,11 @@ and it is the number to sanity-check against.
 
 **With the live database, expect all 239 to run: `skipped` should be 0.**
 
+If some now-running live tests fail, triage them against the sparse-data
+checklist in plan 1 before treating them as defects — a synthetic file that
+lacks, say, a brokerage account fails `list_portfolio` for want of data, not
+for want of correct code.
+
 ---
 
 ## Step 3 — The interaction check (the reason for this plan)
@@ -90,14 +95,17 @@ npx tsx src/index.ts raw_query \
   --sql "SELECT * FROM ZTRANSACTION" 2>&1 | tail -5
 
 # An unreadable database, so the failure happens at open time.
-QUICKEN_DB_PATH="$HOME/Documents/quicken-test-copy.quicken/nonexistent" \
+QUICKEN_DB_PATH="$HOME/Documents/My Test Finances (2026).quicken/nonexistent" \
   npx tsx src/index.ts raw_query --sql "SELECT 1" 2>&1 | tail -5
 ```
 
 For every one of these, check the output for:
 
-1. **No real path fragments** — no `/Users/<you>`, no real folder names, no
-   `.quicken` bundle name. `<path>` and `~` are the expected redactions.
+1. **No path fragments** — no `/Users/quicken-test`, and nothing of
+   `My Test Finances (2026).quicken`. That name is the test: spaces and
+   parentheses are exactly what defeated the old sanitizer, so anything like
+   `<path> Test Finances (2026).quicken` is a live leak worth reporting.
+   `<path>` and `~` are the expected redactions.
 2. **The error is still useful** — over-redaction is its own failure. If the
    message has been reduced to something like `Error: <path>` with no
    indication of what went wrong, note it: the sanitizer is too aggressive and

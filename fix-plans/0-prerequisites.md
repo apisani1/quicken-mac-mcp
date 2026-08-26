@@ -29,11 +29,12 @@ without admin credentials it does not have.
 
 **What it does not protect — read this part:**
 
-- **The copied Quicken bundle is still real financial data**, sitting in the
-  same account the untrusted code runs in, and decrypted while Quicken is
-  open. The account boundary does not protect the copy from code running
-  inside that account. If you have a smaller or older Quicken file that would
-  still exercise the schema, prefer it.
+- **Whatever database you point the tests at is readable by code running in
+  that account**, and is decrypted while Quicken is open. The account boundary
+  does not protect it from code running inside the account. This is why step 3
+  builds a **synthetic** Quicken file: with no real financial data in the
+  account, there is nothing meaningful left to exfiltrate, and the isolation
+  and the data protection stop depending on each other.
 - **Network egress is unrestricted.** Anything readable in the account can be
   exfiltrated.
 - **Home directories are group-readable at the top level.** macOS creates them
@@ -89,54 +90,66 @@ Either way: **after installing, use Node and git only from `quicken-test`**.
 
 ---
 
-## Step 3 — Move a copy of the Quicken bundle into the test account
+## Step 3 — Build a synthetic Quicken file
 
-A standard user cannot read the administrator's protected folders, so the copy
-has to be staged through a shared location. **Quit Quicken first**, so the
-bundle is not mid-write.
+Create a **new Quicken file with synthetic data** rather than copying your
+real one. Quicken itself creates the file, so the schema is genuine — which is
+the whole point of a live run — while the contents are invented.
 
-**As the administrator:**
+Do this while logged in as `quicken-test`: **File → New**, saved to
+`~/Documents/`.
 
-```bash
-QUICKEN_SRC="/full/path/to/My Finances.quicken"      # <- your real bundle
-sudo cp -R "$QUICKEN_SRC" /Users/Shared/quicken-test-copy.quicken
-sudo chown -R quicken-test:staff /Users/Shared/quicken-test-copy.quicken
+### Name it to earn extra test coverage
+
+```
+~/Documents/My Test Finances (2026).quicken
 ```
 
-**Then, logged in as `quicken-test`:**
+The spaces and parentheses are deliberate. Plan 1 and plan 2 check that error
+messages do not leak filesystem paths, and punctuated, spaced folder names are
+exactly the case that broke the old sanitizer. A boring name tests less.
+
+Then, in the `quicken-test` session:
 
 ```bash
-mkdir -p "$HOME/Documents"
-mv /Users/Shared/quicken-test-copy.quicken "$HOME/Documents/quicken-test-copy.quicken"
-chmod -R 700 "$HOME/Documents/quicken-test-copy.quicken"
-ls -ld "$HOME/Documents/quicken-test-copy.quicken"     # expect drwx------
+export QUICKEN_DB_PATH="$HOME/Documents/My Test Finances (2026).quicken/data"
+chmod -R 700 "$HOME/Documents/My Test Finances (2026).quicken"
 ```
 
-Three details that matter:
+Quote the path everywhere — it contains spaces.
 
-- `/Users/Shared` is world-writable (`drwxrwxrwt`). Do not leave the copy
-  there — the `mv` above is the point, not a formality.
-- The copy lives in the test account's `~/Documents`. That folder is
-  TCC-protected, so the first time Terminal (or `node`) reads it macOS will
-  prompt: *"Terminal would like to access files in your Documents folder."*
-  **Approve it.** This is a narrow, per-app, per-account grant — it is not
-  Full Disk Access, and it does not reach the administrator account.
-- Quicken needs to **write** to the bundle it opens, which is why ownership is
-  transferred rather than just read access.
+### What the file has to contain
 
-One useful side effect: `~/Documents` is exactly where the tool's
-auto-detection looks for a `.quicken` bundle, so it will find this copy on its
-own. Set `QUICKEN_DB_PATH` explicitly anyway. With it set, an unusable
-database makes `npm test` **fail** (exit 1); with auto-detection alone, the
-live suites merely warn and skip — which is the silent-skip failure mode this
-whole effort exists to eliminate.
+This is the part that decides whether plan 1 is meaningful. **46 assertions
+across 18 live suites require non-empty results**, and a sparse file makes
+them fail in ways that look like code bugs but are only missing data. Build
+for this list:
 
-Locating your original bundle has to happen from the account that owns it —
-`mdfind` run as `quicken-test` will not see the administrator's files. Plan 1
-step 0 has the search commands; run those as the administrator, then use the
-path here.
+| Data | Why | Suites that fail without it |
+|------|-----|------------------------------|
+| ≥1 checking **and** ≥1 credit card account | the spending tools default to those two types | `list_accounts`, both spending suites |
+| Categories, expense **and** income, with parent/child pairs | the hierarchy is asserted directly | `list_categories`, `getCategoryTagEntityId`, `category hierarchy integrity` |
+| A few hundred transactions with payees, spread over ≥2 years | date bucketing, sorting, monthly aggregation | `query_transactions`, `date handling`, `spending_over_time` |
+| Negative-amount categorized spending | every spending total | `spending_by_category`, `spending aggregation integrity` |
+| Distinct payee names | substring search | `search_payees`, `payee search` |
+| ≥1 brokerage account with securities, holdings and quotes | portfolio joins across ZLOT/ZPOSITION/ZSECURITY | `list_portfolio` (5), `portfolio data integrity` (2) |
+| Some transfers, some splits, some uncategorized, some excluded-from-reports | these are the exclusions the spending tools apply | `cross-tool consistency`, `edge cases` |
 
----
+The brokerage account is the fiddliest — add the account, buy a couple of
+securities, and let Quicken download or hand-enter quotes. Skipping it costs
+you 7 assertions.
+
+If you want to exceed 500 transactions without hand-entry, Quicken's
+**File → Import** accepts QIF/CSV depending on account type; generating a file
+of invented transactions is far faster than typing them. Verify what your
+Quicken version accepts before investing time in generating one.
+
+### What a synthetic file cannot tell you
+
+Real data volume. Plan 1 asks whether the new 5000-row shared cap is too low
+for a long-history file, and a synthetic file cannot answer that. Plan 1 step 3
+has a safe way to check it against your real file without running any test
+code against it.
 
 ## Step 4 — Log in as `quicken-test` and set up the repo
 
@@ -179,8 +192,8 @@ never copy `node_modules/` between accounts or volumes.
 
 ## Step 5 — Quicken, in the test account
 
-Launch Quicken while logged in as `quicken-test` and open
-`~/Documents/quicken-test-copy.quicken`.
+Launch Quicken while logged in as `quicken-test` and open your synthetic file,
+`~/Documents/My Test Finances (2026).quicken`.
 
 - You will likely have to **sign in with your Quicken ID** in this account,
   since subscription state is per-user. That places Quicken credentials inside
@@ -206,7 +219,7 @@ node -v && npm -v && git --version && sqlite3 --version | head -1 \
 Then confirm the database copy is actually decrypted:
 
 ```bash
-export QUICKEN_DB_PATH="$HOME/Documents/quicken-test-copy.quicken/data"
+export QUICKEN_DB_PATH="$HOME/Documents/My Test Finances (2026).quicken/data"
 sqlite3 "$QUICKEN_DB_PATH" ".tables" | tr ' ' '\n' | grep -c ZACCOUNT   # expect >= 1
 node scripts/report-live-test-status.mjs; echo "exit=$?"                # expect exit=0
 ```
@@ -235,11 +248,9 @@ working volume.
 
 ## When you are finished
 
-The copy is real financial data. When testing is done:
+The synthetic file holds no real data, so there is nothing urgent to destroy —
+keep it for the next round of testing rather than rebuilding it. Building a
+usable one is the most tedious part of this whole setup, and plan 4 will want
+a live database again.
 
-```bash
-rm -rf "$HOME/Documents/quicken-test-copy.quicken"
-```
-
-Keep the account itself if you expect a second round of testing; delete it
-along with its home directory if not.
+Keep the `quicken-test` account for the same reason.

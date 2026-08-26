@@ -13,59 +13,27 @@ Expect 30–45 minutes, most of it waiting on `npm ci`.
 
 ## Step 0 — Confirm the database path (do not skip)
 
-If you completed plan 0 step 3, the copy is already in place and this step is
-a confirmation, not a search:
+Plan 0 step 3 built a synthetic Quicken file in the test account. Confirm it:
 
 ```bash
 ls -d ~/Documents/*.quicken
+export QUICKEN_DB_PATH="$HOME/Documents/My Test Finances (2026).quicken/data"
+sqlite3 "$QUICKEN_DB_PATH" "SELECT COUNT(*) FROM ZACCOUNT;"
+sqlite3 "$QUICKEN_DB_PATH" "SELECT COUNT(*) FROM ZTRANSACTION;"
 ```
 
-You should see `quicken-test-copy.quicken`. A `.quicken` file is a **bundle**
-(a directory); the database the tests read is the `data` file inside it:
+Both counts must be non-zero. Zero means Quicken is not running with this file
+open, so the database is still an encrypted stub. Quote the path everywhere —
+it contains spaces, which is deliberate (see plan 0).
 
-```
-~/Documents/quicken-test-copy.quicken/data
-                                     ^^^^ this is what QUICKEN_DB_PATH points to
-```
+### Two reminders from plan 0
 
-### If you still need to find the original
-
-Locating your original bundle must be done **from the administrator account
-that owns it** — `mdfind` run as `quicken-test` cannot see another user's
-files. From that account:
-
-```bash
-ls -d ~/Documents/*.quicken 2>/dev/null
-mdfind -name '.quicken' 2>/dev/null | grep '\.quicken$'
-ls -d /Volumes/*/*.quicken /Volumes/*/*/*.quicken 2>/dev/null
-find "$HOME" -maxdepth 4 -name '*.quicken' -prune -print 2>/dev/null
-```
-
-If none of them find it, open Quicken and use **File → Show in Finder** (or
-check the recent-files list) to see where the open file lives. Then go back to
-plan 0 step 3 to stage the copy across.
-
-### Work on a copy, in the `quicken-test` account
-
-Plan 0 step 3 already staged the copy into the test account's home. If you
-followed it, the path is:
-
-```bash
-export QUICKEN_DB_PATH="$HOME/Documents/quicken-test-copy.quicken/data"
-```
-
-Two reminders from plan 0, because everything below depends on them:
-
-- Quicken must be **running in the `quicken-test` session** with
-  `~/Documents/quicken-test-copy.quicken` open. Closed Quicken means an encrypted stub
-  and every live suite fails.
-- Never point `QUICKEN_DB_PATH` at your original bundle. The tests open the
-  database read-only, but Quicken itself will open and possibly upgrade
-  whatever file you hand it.
-
-Searching for the original bundle (the commands above) has to be done from the
-account that owns it — `mdfind` as `quicken-test` will not see the
-administrator's files.
+- Quicken must be **running in the `quicken-test` session** with the synthetic
+  file open. Closed Quicken means an encrypted stub and every live suite fails.
+- Never point `QUICKEN_DB_PATH` at your real Quicken file. The tests open the
+  database read-only, but Quicken will open and possibly upgrade whatever file
+  you hand it, and the point of the synthetic file is that no real data is
+  reachable from this account at all.
 
 ### Verify before running anything
 
@@ -132,21 +100,38 @@ What the live run adds that the synthetic suite cannot:
   spending, portfolio)
 - cross-tool consistency checks (spending totals reconciling across tools)
 
-### Extra manual check: the new shared result bounds
+### Extra manual check: is the shared 5000-row cap high enough?
 
-This branch added a 5000-row / 2 MB cap to *every* tool, and a real file is
-the first chance to see whether any legitimate query trips it:
+This branch added a 5000-row / 2 MB bound to every tool. A synthetic file is
+too small to test whether that ceiling is too low for a real long-history
+file — but you can answer it **without running any test code against your real
+data**, using a single read-only query from the administrator account that
+owns the real file:
 
 ```bash
-npx tsx src/index.ts list_categories | tail -5
-npx tsx src/index.ts spending_over_time --start_date 2000-01-01 \
-    --end_date 2026-12-31 --group_by_category true | tail -5
+# As the administrator, against the REAL file. Read-only, no npm, no Node.
+REAL="/path/to/My Finances.quicken/data"
+sqlite3 "$REAL" "
+  SELECT COUNT(*) FROM (
+    SELECT DISTINCT strftime('%Y-%m', COALESCE(t.ZPOSTEDDATE, t.ZENTEREDDATE) + 978307200, 'unixepoch') AS m,
+           s.ZCATEGORYTAG AS c
+    FROM ZTRANSACTION t JOIN ZCASHFLOWTRANSACTIONENTRY s ON s.ZPARENT = t.Z_PK
+  );"
 ```
 
-The second one is the intended stress case: one row per month per category
-over your full history. If it errors with `returned too many rows`, that is
-the cap working — but note the number and tell me, because it would mean the
-5000 ceiling is too low for a real long-history file and should be raised.
+That is roughly the worst-case row count for `spending_over_time` with
+`group_by_category` over your full history. If it approaches or exceeds 5000,
+the cap is too low for real use and should be raised before the PR — tell me
+the number.
+
+Against the synthetic file, just confirm the bound does not fire on ordinary
+queries:
+
+```bash
+npx tsx src/index.ts list_categories | tail -3
+npx tsx src/index.ts spending_over_time --start_date 2000-01-01 \
+    --end_date 2026-12-31 --group_by_category true | tail -3
+```
 
 ---
 
@@ -172,7 +157,7 @@ look at the message:
 ```bash
 # Point at a nonexistent file inside your real directory, so the error message
 # contains a genuine path with your real folder names in it.
-QUICKEN_DB_PATH="$HOME/Documents/quicken-test-copy.quicken/nonexistent" \
+QUICKEN_DB_PATH="$HOME/Documents/My Test Finances (2026).quicken/nonexistent" \
   npx tsx src/index.ts list_accounts 2>&1 | tail -5
 ```
 
@@ -182,6 +167,30 @@ instead. If any fragment of a real path survives, copy the exact output — that
 is a live leak the synthetic tests missed, and it needs fixing before the PR.
 
 ---
+
+## Sparse-data failures: triage before reporting a bug
+
+46 assertions across 18 live suites expect non-empty results. If your synthetic
+file is missing a data shape, those tests fail — and the failure looks like a
+code defect when it is a data gap.
+
+Before treating any live failure as real, check the shape it needs:
+
+```bash
+sqlite3 "$QUICKEN_DB_PATH" "SELECT ZTYPENAME, COUNT(*) FROM ZACCOUNT GROUP BY ZTYPENAME;"
+sqlite3 "$QUICKEN_DB_PATH" "SELECT COUNT(*) FROM ZTRANSACTION;"
+sqlite3 "$QUICKEN_DB_PATH" "SELECT COUNT(*) FROM ZLOT;"          -- 0 => list_portfolio will fail
+sqlite3 "$QUICKEN_DB_PATH" "SELECT COUNT(*) FROM ZSECURITYQUOTE;" -- 0 => quote enrichment will fail
+```
+
+A failure is a **data gap** if the assertion is `toBeGreaterThan(0)` or
+`length > 0` on a table your file does not populate. It is a **real failure**
+if the tool returns rows but the values, ordering, or totals are wrong — those
+are the assertions worth acting on.
+
+Record which is which when you report back. A run where `list_portfolio` fails
+for want of a brokerage account is still a useful run; it just does not cover
+portfolio code.
 
 ## Step 5 — Report back
 
