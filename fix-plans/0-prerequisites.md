@@ -196,6 +196,39 @@ Every count that comes back zero tells you which suites will fail for want of
 data rather than for want of correct code. `transfers`, `splits`, `excluded`
 and `lots` are the four most likely zeros after a CSV-only import.
 
+### Hard requirements the live tests impose
+
+Two of these are not negotiable, and both constrain which accounts and years
+you export. They come from values hard-coded in the live suites:
+
+1. **Calendar year 2024 must be covered.** `2024-01-01`, `2024-12-31` and
+   `2024-06-30` appear 22 times across the live suites, and several of those
+   assertions require non-empty results. A sample of "a limited number of
+   years" that omits 2024 will fail tests that have nothing to do with the
+   code. Exporting 2023–2025 gives 2024 plus range boundaries on either side,
+   which the narrow-date-range and newest-first-ordering tests want.
+
+2. **An account with `ZTYPENAME` of exactly `CHECKING`, holding
+   transactions.** `list_accounts` filters on it and asserts a non-empty
+   result; `query_transactions` filters `account_types: ["checking"]` and does
+   the same.
+
+3. **A credit card account with transactions dated in 2024.**
+   `spending_over_time` is asserted with `account_types: ["creditcard"]` over
+   `2024-01-01`–`2024-12-31` and expects rows back.
+
+Your plan to sample **banking, credit cards, cash, assets and brokerage** is
+more than these need, and the extra types are genuinely useful — they exercise
+account-type filtering, the sorted-by-name listing, and the cross-tool check
+that every transaction's account name appears in `list_accounts`.
+
+One thing to keep in mind while choosing volumes: the spending tools default
+to `checking` and `creditcard` only. Cash and asset accounts broaden account
+coverage but contribute nothing to the spending suites, so put the bulk of
+your transaction volume in checking and credit card accounts.
+
+Brokerage is the one type CSV alone will not deliver — see below.
+
 ### What the file has to contain
 
 This is the part that decides whether plan 1 is meaningful. **46 assertions
