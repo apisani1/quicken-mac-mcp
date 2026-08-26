@@ -118,6 +118,84 @@ chmod -R 700 "$HOME/Documents/My Test Finances (2026).quicken"
 
 Quote the path everywhere — it contains spaces.
 
+### Recommended way to populate it: scrubbed CSV from your real file
+
+Hand-entering hundreds of transactions is miserable, and a hand-built file
+tends to be too tidy to be a useful test. Exporting a subset of your real data,
+scrubbing anything identifying, and importing that into the new file gives you
+realistic shapes — real payee distributions, real category spread, real date
+gaps — with the identity removed.
+
+**Do the export and the scrub from the administrator account** that owns the
+real file. Only the scrubbed CSV crosses into `quicken-test`; the real bundle
+never does.
+
+1. In Quicken, with your real file open: export the registers you want
+   (a couple of accounts, a couple of years) to CSV.
+2. Scrub the CSV before it leaves the admin account. What identifies you:
+
+   | Field | Treatment |
+   |-------|-----------|
+   | Account name | rename — "Checking", "Card", "Brokerage" |
+   | Payee | replace with invented names; keep the *distribution* (a few frequent, many rare) so payee search is still meaningful |
+   | Memo / notes | drop entirely — free text is where surprises hide |
+   | Check numbers | drop |
+   | Amounts | jitter by a few percent; salary and rent amounts identify you on their own |
+   | Dates | keep — the date spread is what makes the monthly bucketing tests real |
+
+   Keep categories as they are unless your category names are personal.
+3. Move only the scrubbed CSV to `/Users/Shared`, import it into the new file
+   from the `quicken-test` session, then delete it from `/Users/Shared`.
+
+### What CSV import will not reproduce
+
+Worth knowing before you assume the file is complete. These are schema
+features the tools depend on, which a register CSV does not carry:
+
+- **Transfers.** The spending tools exclude them via `ZTARGETACCOUNT`,
+  `ZSENDACCOUNT` and `ZTRANSFER`. An imported CSV row usually becomes an
+  ordinary categorized transaction, not a linked transfer, so that exclusion
+  path goes untested. Create a few real transfers by hand between two imported
+  accounts.
+- **Splits.** One CSV row generally imports as one
+  `ZCASHFLOWTRANSACTIONENTRY`. The split handling — including the
+  negative-split convention the spending tools rely on — needs a handful of
+  hand-entered split transactions.
+- **Excluded-from-reports.** `ZEXCLUDEFROMREPORTS` is not a CSV column. Flag a
+  couple of transactions manually in Quicken.
+- **Investments.** Holdings come from `ZLOT`/`ZPOSITION`/`ZSECURITY` and prices
+  from `ZSECURITYQUOTE`. A banking CSV creates none of them. To cover
+  `list_portfolio` at all, add a brokerage account and enter a couple of buys
+  so Quicken builds the lots.
+
+One upside: CSV-imported transactions often have a null `ZPOSTEDDATE`, and the
+code has a `COALESCE(ZPOSTEDDATE, ZENTEREDDATE)` fallback specifically for
+that case. `integration.test.ts` has a test that only does real work when such
+rows exist, so a CSV-built file may exercise that path better than a real one.
+
+### Check what you actually ended up with
+
+After importing, measure the file against what the suites need — this takes
+seconds and saves you triaging phantom failures later:
+
+```bash
+Q="$HOME/Documents/My Test Finances (2026).quicken/data"
+sqlite3 "$Q" "SELECT ZTYPENAME, COUNT(*) FROM ZACCOUNT GROUP BY ZTYPENAME;"
+sqlite3 "$Q" "SELECT COUNT(*) AS transactions FROM ZTRANSACTION;"
+sqlite3 "$Q" "SELECT COUNT(*) AS payees FROM ZUSERPAYEE;"
+sqlite3 "$Q" "SELECT COUNT(*) AS categories FROM ZTAG;"
+sqlite3 "$Q" "SELECT COUNT(*) AS transfers FROM ZTRANSACTION WHERE ZTARGETACCOUNT IS NOT NULL OR ZSENDACCOUNT IS NOT NULL;"
+sqlite3 "$Q" "SELECT COUNT(*) AS splits FROM (SELECT ZPARENT FROM ZCASHFLOWTRANSACTIONENTRY GROUP BY ZPARENT HAVING COUNT(*) > 1);"
+sqlite3 "$Q" "SELECT COUNT(*) AS excluded FROM ZTRANSACTION WHERE COALESCE(ZEXCLUDEFROMREPORTS,0) = 1;"
+sqlite3 "$Q" "SELECT COUNT(*) AS lots FROM ZLOT;"
+sqlite3 "$Q" "SELECT COUNT(*) AS quotes FROM ZSECURITYQUOTE;"
+sqlite3 "$Q" "SELECT COUNT(*) AS null_posted FROM ZTRANSACTION WHERE ZPOSTEDDATE IS NULL AND ZENTEREDDATE IS NOT NULL;"
+```
+
+Every count that comes back zero tells you which suites will fail for want of
+data rather than for want of correct code. `transfers`, `splits`, `excluded`
+and `lots` are the four most likely zeros after a CSV-only import.
+
 ### What the file has to contain
 
 This is the part that decides whether plan 1 is meaningful. **46 assertions
