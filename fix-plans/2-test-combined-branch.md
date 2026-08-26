@@ -61,11 +61,14 @@ this plan was written, and the resolution is a decision, not a mechanical fix.
 ## Step 2 — Full verification
 
 ```bash
-npm ci
 npm run build
 npm run lint
 npm test 2>&1 | tee ~/results-combined.txt
 ```
+
+No `npm ci` here either: the merge changes no dependency, so the install from
+plan 0 still applies. Re-running it would only execute dependency install
+scripts again.
 
 **Baseline without a live database:** `130 passed | 109 skipped (239)`.
 That is more than either branch alone — 116 + 88 minus the tests they share —

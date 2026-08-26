@@ -18,13 +18,25 @@ Plan 0 step 3 built a synthetic Quicken file in the test account. Confirm it:
 ```bash
 ls -d ~/Documents/*.quicken
 export QUICKEN_DB_PATH="$HOME/Documents/My Test Finances (2026).quicken/data"
-sqlite3 "$QUICKEN_DB_PATH" "SELECT COUNT(*) FROM ZACCOUNT;"
-sqlite3 "$QUICKEN_DB_PATH" "SELECT COUNT(*) FROM ZTRANSACTION;"
+
+# 1. Is it a readable database with the expected schema?
+sqlite3 -readonly "$QUICKEN_DB_PATH" ".tables" | tr ' ' '\n' | grep -x ZACCOUNT
+
+# 2. Does it hold data?
+sqlite3 -readonly "$QUICKEN_DB_PATH" "SELECT COUNT(*) FROM ZACCOUNT;"
+sqlite3 -readonly "$QUICKEN_DB_PATH" "SELECT COUNT(*) FROM ZTRANSACTION;"
 ```
 
-Both counts must be non-zero. Zero means Quicken is not running with this file
-open, so the database is still an encrypted stub. Quote the path everywhere —
-it contains spaces, which is deliberate (see plan 0).
+Read the two results differently — they diagnose different problems:
+
+- **Step 1 errors** (`file is not a database`, `no such table`, or no output):
+  the file is still the encrypted stub. Quicken is not running, or is not
+  holding *this* file open.
+- **Step 1 succeeds but a count is 0:** the database is decrypted and readable;
+  the table is simply empty. That is a data-population problem — go back to
+  plan 0 step 3, not a Quicken-is-closed problem.
+
+Quote the path everywhere: it contains spaces, which is deliberate (see plan 0).
 
 ### Two reminders from plan 0
 
@@ -47,15 +59,21 @@ encrypted — Quicken is not running, or is not holding *this* copy open.
 
 ---
 
-## Step 1 — Get the repository
+## Step 1 — Refresh the repository
 
-The repo is public, so no SSH key or GitHub login is needed:
+Plan 0 step 4 already cloned it and installed dependencies. Do **not** clone
+again — the directory exists, and a second `npm ci` would re-run every
+dependency install script for nothing.
 
 ```bash
-git clone https://github.com/apisani1/quicken-mac-mcp.git
-cd quicken-mac-mcp
+cd ~/quicken-mac-mcp
+git fetch origin
 node -v        # must be >= 22
 ```
+
+Both fix branches carry identical `package.json` and `package-lock.json`, so
+the single install from plan 0 covers every branch you check out below. Re-run
+`npm ci` only if you switch Node versions or delete `node_modules/`.
 
 ---
 
@@ -80,7 +98,6 @@ ambiguous between "the code is broken" and "the database was never readable".
 
 ```bash
 git checkout fix/raw-query-hardening
-npm ci
 npm run build
 npm run lint
 npm test 2>&1 | tee ~/results-hardening.txt
@@ -100,32 +117,10 @@ What the live run adds that the synthetic suite cannot:
   spending, portfolio)
 - cross-tool consistency checks (spending totals reconciling across tools)
 
-### Extra manual check: is the shared 5000-row cap high enough?
+### Extra manual check: does the shared cap fire on ordinary queries?
 
-This branch added a 5000-row / 2 MB bound to every tool. A synthetic file is
-too small to test whether that ceiling is too low for a real long-history
-file — but you can answer it **without running any test code against your real
-data**, using a single read-only query from the administrator account that
-owns the real file:
-
-```bash
-# As the administrator, against the REAL file. Read-only, no npm, no Node.
-REAL="/path/to/My Finances.quicken/data"
-sqlite3 "$REAL" "
-  SELECT COUNT(*) FROM (
-    SELECT DISTINCT strftime('%Y-%m', COALESCE(t.ZPOSTEDDATE, t.ZENTEREDDATE) + 978307200, 'unixepoch') AS m,
-           s.ZCATEGORYTAG AS c
-    FROM ZTRANSACTION t JOIN ZCASHFLOWTRANSACTIONENTRY s ON s.ZPARENT = t.Z_PK
-  );"
-```
-
-That is roughly the worst-case row count for `spending_over_time` with
-`group_by_category` over your full history. If it approaches or exceeds 5000,
-the cap is too low for real use and should be raised before the PR — tell me
-the number.
-
-Against the synthetic file, just confirm the bound does not fire on ordinary
-queries:
+This branch added a 5000-row / 2 MB bound to every tool. Confirm it does not
+trip on normal use of the synthetic file:
 
 ```bash
 npx tsx src/index.ts list_categories | tail -3
@@ -133,13 +128,17 @@ npx tsx src/index.ts spending_over_time --start_date 2000-01-01 \
     --end_date 2026-12-31 --group_by_category true | tail -3
 ```
 
+Whether that ceiling is high enough for a **real** long-history file is a
+separate question, and it is deliberately not asked here — nothing in this
+account should touch real data. Plan 0 has it as an optional read-only check
+you run from the administrator account.
+
 ---
 
 ## Step 4 — Test `fix/sanitize-error-paths`
 
 ```bash
 git checkout fix/sanitize-error-paths
-npm ci
 npm run build
 npm run lint
 npm test 2>&1 | tee ~/results-sanitize.txt

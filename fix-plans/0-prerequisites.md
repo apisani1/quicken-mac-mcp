@@ -74,19 +74,35 @@ Install only what is missing:
 xcode-select --install     # git, and the compiler fallback for node-gyp
 ```
 
-**Node — prefer the no-admin route.** Installing the official `.pkg` requires
-admin and puts Node system-wide. Installing `nvm` inside the `quicken-test`
-account requires no admin at all and keeps the toolchain inside the boundary:
+**Node — prefer a signed installer over a piped script.** The obvious no-admin
+route is `curl … | bash` to install nvm, and it is the wrong default here:
+it executes remotely delivered code inside the very account that will hold the
+synthetic file and an open Quicken session. The standard-account boundary
+limits the blast radius, but it does not make that safe.
 
-```bash
-# run this later, logged in AS quicken-test — not as admin
-curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
-exec "$SHELL" -l
-nvm install 24 && nvm use 24
-```
+In preference order:
 
-Use the `.pkg` only if you would rather not run an install script from a URL.
-Either way: **after installing, use Node and git only from `quicken-test`**.
+1. **Official Node `.pkg`, installed in a short administrator session.** It is
+   signed and notarized, and Node lands system-wide where `quicken-test` can
+   use it. Requires admin once, then never again.
+2. **Official Node archive, checksum-verified**, unpacked into
+   `~/.local/node` in the test account. No admin, no piped execution:
+
+   ```bash
+   # Compare against the SHASUMS256.txt published with the release.
+   shasum -a 256 node-v24.*.tar.gz
+   ```
+3. **nvm, if you want its version switching** — but download the installer,
+   read it, then run it. Do not pipe it into a shell:
+
+   ```bash
+   curl -fsSL -o /tmp/nvm-install.sh https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh
+   less /tmp/nvm-install.sh          # actually look at it
+   bash /tmp/nvm-install.sh
+   ```
+
+Whichever route: **after installing, use Node and git only from
+`quicken-test`.**
 
 ---
 
@@ -98,6 +114,11 @@ the whole point of a live run — while the contents are invented.
 
 Do this while logged in as `quicken-test`: **File → New**, saved to
 `~/Documents/`.
+
+**Choose "Don't use Quicken Mobile & Web" when prompted.** Enabling sync would
+upload this file to Quicken's cloud and tie a throwaway test file to your
+Quicken account. Nothing in these plans needs sync, and the tests read the
+local database directly.
 
 ### Name it to earn extra test coverage
 
@@ -198,8 +219,29 @@ never does.
    | Dates | keep — the date spread is what makes the monthly bucketing tests real |
 
    Keep categories as they are unless your category names are personal.
-3. Move only the scrubbed CSV to `/Users/Shared`, import it into the new file
-   from the `quicken-test` session, then delete it from `/Users/Shared`.
+3. Hand the scrubbed CSV over **privately**. `/Users/Shared` is world-readable
+   (`drwxrwxrwt`) by every local account, so do not stage it there. As the
+   administrator, place it straight into the test account with tight
+   permissions:
+
+   ```bash
+   sudo mkdir -p /Users/quicken-test/import
+   sudo cp scrubbed.csv /Users/quicken-test/import/
+   sudo chown -R quicken-test:staff /Users/quicken-test/import
+   sudo chmod 700 /Users/quicken-test/import
+   ```
+
+   Import it from the `quicken-test` session, then delete it:
+   `rm -rf ~/import`. Once imported, the CSV has served its purpose.
+
+**What scrubbing does not remove.** Renamed payees and jittered amounts still
+leave your real transaction *timing and category patterns* intact — how often
+you shop, when income arrives, which categories dominate. That is lower-value
+than payee names and exact amounts, but it is not nothing. If you want the
+residual to be zero, generate the transactions outright instead of scrubbing
+real ones: invent payee names, categories and a date/amount distribution, and
+import that. It costs a generator script and buys a file with no derivation
+from your data at all.
 
 ### What CSV import will not reproduce
 
@@ -290,12 +332,39 @@ Every count that comes back zero tells you which suites will fail for want of
 data rather than for want of correct code. `transfers`, `splits`, `excluded`
 and `lots` are the four most likely zeros after a CSV-only import.
 
-### What a synthetic file cannot tell you
+### What a synthetic file cannot tell you, and the one query that can
 
-Real data volume. Plan 1 asks whether the new 5000-row shared cap is too low
-for a long-history file, and a synthetic file cannot answer that. Plan 1 step 3
-has a safe way to check it against your real file without running any test
-code against it.
+Real data volume. `fix/raw-query-hardening` introduces a 5000-row cap on every
+tool, and whether that ceiling is too low for a genuine long-history file is a
+design question the PR should answer. A synthetic file cannot answer it.
+
+This is the one place where looking at real data is worth it — so keep it
+entirely outside the test account. Run it **as the administrator, in the
+account that owns the real file**, before or after the test session. One
+read-only `SELECT`: no Node, no npm, no test code, no `quicken-test`.
+
+```bash
+REAL="/path/to/My Finances.quicken/data"      # Quicken must be running
+sqlite3 -readonly "$REAL" "
+  SELECT COUNT(*) FROM (
+    SELECT DISTINCT
+      strftime('%Y-%m', COALESCE(t.ZPOSTEDDATE, t.ZENTEREDDATE) + 978307200, 'unixepoch') AS m,
+      s.ZCATEGORYTAG AS c
+    FROM ZTRANSACTION t
+    JOIN ZCASHFLOWTRANSACTIONENTRY s ON s.ZPARENT = t.Z_PK
+  );"
+```
+
+`-readonly` is not decoration: the `sqlite3` CLI opens read-write by default,
+and this is your real financial database.
+
+The result approximates the worst-case row count for `spending_over_time` with
+`group_by_category` over your full history. If it approaches or exceeds 5000,
+the cap is too low for real use and should be raised before the PR — report
+the number.
+
+Skip this entirely if you would rather no command touch the real file; the two
+PRs do not depend on it.
 
 ## Step 4 — Log in as `quicken-test` and set up the repo
 
@@ -310,6 +379,18 @@ npm ci
 
 The repo is public, so the clone needs no SSH key and no GitHub login. Do not
 copy the administrator's `~/.ssh` or git credentials into this account.
+
+**Copy the plans out of the repo before you check out a fix branch.** Both fix
+branches predate `fix-plans/`, so checking one out removes these files from
+the working tree — mid-plan, while you are reading them:
+
+```bash
+cp -R fix-plans ~/fix-plans
+```
+
+Read them from `~/fix-plans` (or from GitHub in a browser) for the rest of the
+session. Do not solve this by merging `main` into a fix branch: that would put
+`fix-plans/` into the PR diff.
 
 `npm ci` is the step that runs untrusted install scripts. Add
 `--foreground-scripts` if you want to see exactly what they do:
@@ -352,22 +433,61 @@ Launch Quicken while logged in as `quicken-test` and open your synthetic file,
 
 ---
 
+## Step 5b — Optional: take Secure Space off the network
+
+Once prerequisites are installed and the synthetic file is populated, nothing
+in plans 1 and 2 needs the network. The test suite is entirely local, the
+repository is already cloned, and dependencies are already installed.
+
+Disconnecting at that point is a strong mitigation: a compromised dependency
+can still read what the account can reach, but it has nowhere to send it.
+
+Sequence matters — disconnect **after** all of these are done:
+
+1. `npm ci` has completed (registry and prebuild download).
+2. Quicken has downloaded any security quotes you want for the brokerage
+   account.
+3. Quicken has validated your subscription, if it insists on doing so.
+
+Then turn Wi-Fi off. Reconnect only when you are ready to move results out.
+
+---
+
 ## Step 6 — Verify you are ready
 
 ```bash
-node -v && npm -v && git --version && sqlite3 --version | head -1 \
-  && node -e "require('better-sqlite3'); console.log('native module OK')" \
-  && (pgrep -x Quicken >/dev/null && echo "Quicken running" || echo "Quicken NOT running") \
-  && id -Gn | tr ' ' '\n' | grep -qx admin && echo "WARNING: this account has admin rights" \
-  || echo "account is non-admin (good)"
+node -v
+npm -v
+git --version
+sqlite3 --version | head -1
+node -e "require('better-sqlite3'); console.log('native module OK')"
+
+if pgrep -x Quicken >/dev/null; then
+  echo "Quicken running"
+else
+  echo "Quicken NOT running — start it before plan 1"
+fi
+
+if id -Gn | tr ' ' '\n' | grep -qx admin; then
+  echo "WARNING: this account has administrator rights — it should not"
+else
+  echo "account is non-admin (good)"
+fi
 ```
 
-Then confirm the database copy is actually decrypted:
+Each check stands alone deliberately. Chaining them with `&&` and `||` lets an
+early failure fall through to the final `||` branch and print the reassuring
+message when nothing was actually verified.
+
+Then confirm the database is actually decrypted and populated:
 
 ```bash
 export QUICKEN_DB_PATH="$HOME/Documents/My Test Finances (2026).quicken/data"
-sqlite3 "$QUICKEN_DB_PATH" ".tables" | tr ' ' '\n' | grep -c ZACCOUNT   # expect >= 1
-node scripts/report-live-test-status.mjs; echo "exit=$?"                # expect exit=0
+
+# An error here (not a zero) means the file is still the encrypted stub.
+sqlite3 -readonly "$QUICKEN_DB_PATH" ".tables" | tr ' ' '\n' | grep -x ZACCOUNT
+
+node scripts/report-live-test-status.mjs; echo "exit=$?"    # expect exit=0
 ```
 
 Ready? Go to **plan 1**.
