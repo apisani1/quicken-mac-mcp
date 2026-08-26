@@ -3,10 +3,15 @@
 Do this once, before plan 1. Everything happens on the **Secure Space** boot
 volume.
 
-Plans 1, 2 and 3 all run from a dedicated **standard (non-admin)** account
-named `quicken-test`, so that `npm` install scripts, Node, and the test suite
-never run with administrator privileges or with access to the administrator
+Plans 1 and 2 run from a dedicated **standard (non-admin)** account named
+`quicken-test`, so that `npm` install scripts, Node, and the test suite never
+run with administrator privileges or with access to the administrator
 account's data.
+
+Plan 3 (opening the PRs) is **not** done here. It needs no Quicken database,
+and it does need GitHub credentials — which is exactly what should stay out of
+this account. Run it from your normal working volume once plans 1 and 2 are
+green.
 
 ---
 
@@ -224,6 +229,9 @@ cp ~/results-*.txt /Users/Shared/          # readable from the admin account
 and delete them from `/Users/Shared` once collected. What actually matters is
 short enough to paste by hand: the final `Tests` line, any failure output, and
 the results of the manual checks in plan 1 and plan 2.
+
+Those results are the input to plan 3, which you run back on your normal
+working volume.
 
 ## When you are finished
 

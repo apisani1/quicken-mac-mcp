@@ -1,7 +1,12 @@
 # Plan 4 — Replace the regex blocklist with a real statement policy
 
-Independent follow-up work. Not a blocker for plans 1–3; it becomes its own
-PR after those land.
+Independent follow-up work, and still **TBD** — nothing here is scheduled. Not
+a blocker for plans 1–3; it becomes its own PR after those land.
+
+Assumes a normal development environment on your usual volume: no isolated
+account, no privilege restrictions. The live-database verification in the
+definition of done can reuse the `quicken-test` setup from plan 0 if you want
+it, but the work itself does not need one.
 
 This addresses the two findings deliberately deferred during the security
 review:

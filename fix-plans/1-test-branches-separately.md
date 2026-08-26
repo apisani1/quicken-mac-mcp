@@ -3,17 +3,36 @@
 Goal: prove `fix/raw-query-hardening` and `fix/sanitize-error-paths` each
 work against a real Quicken file, independently. Plan 2 tests them together.
 
+**Where this runs:** the `quicken-test` standard account on the Secure Space
+volume, set up in plan 0. Everything below assumes you are logged into that
+account with Quicken running and the copied bundle open.
+
 Expect 30–45 minutes, most of it waiting on `npm ci`.
 
 ---
 
-## Step 0 — Locate your Quicken database (do not skip)
+## Step 0 — Confirm the database path (do not skip)
 
-**The plan does not assume where your file is.** Auto-detection only looks in
-`~/Documents`, and on this setup there is no `.quicken` bundle there. You must
-find your file and set `QUICKEN_DB_PATH` explicitly.
+If you completed plan 0 step 3, the copy is already in place and this step is
+a confirmation, not a search:
 
-Try these, in order, until one prints a path:
+```bash
+ls -d ~/Documents/*.quicken
+```
+
+You should see `quicken-test-copy.quicken`. A `.quicken` file is a **bundle**
+(a directory); the database the tests read is the `data` file inside it:
+
+```
+~/Documents/quicken-test-copy.quicken/data
+                                     ^^^^ this is what QUICKEN_DB_PATH points to
+```
+
+### If you still need to find the original
+
+Locating your original bundle must be done **from the administrator account
+that owns it** — `mdfind` run as `quicken-test` cannot see another user's
+files. From that account:
 
 ```bash
 ls -d ~/Documents/*.quicken 2>/dev/null
@@ -23,15 +42,8 @@ find "$HOME" -maxdepth 4 -name '*.quicken' -prune -print 2>/dev/null
 ```
 
 If none of them find it, open Quicken and use **File → Show in Finder** (or
-check the recent-files list) to see where the open file lives.
-
-A `.quicken` file is a **bundle** (a directory). The database the tests read
-is the `data` file inside it:
-
-```
-/wherever/My Finances.quicken/data
-                             ^^^^ this is what QUICKEN_DB_PATH points to
-```
+check the recent-files list) to see where the open file lives. Then go back to
+plan 0 step 3 to stage the copy across.
 
 ### Work on a copy, in the `quicken-test` account
 

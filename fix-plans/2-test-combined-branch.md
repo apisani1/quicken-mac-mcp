@@ -6,6 +6,9 @@ Goal: catch anything that only breaks when both changes are present. The
 branch is disposable — it exists to be tested and deleted, and nothing is ever
 pushed from it.
 
+**Where this runs:** the same `quicken-test` account on Secure Space as plan
+1, with Quicken still running and the copied bundle open.
+
 Expect 15 minutes.
 
 ---
@@ -134,4 +137,6 @@ Keep `~/results-combined.txt` and record:
   interaction this whole plan was built to find, and it would need fixing
   before either PR merges
 
-If this is green, go to **plan 3** and open the PRs.
+If this is green, you are done in the `quicken-test` account. Copy the result
+files out per plan 0 step 7, log out, and run **plan 3** from your normal
+working volume — it needs no Quicken database and no isolated account.

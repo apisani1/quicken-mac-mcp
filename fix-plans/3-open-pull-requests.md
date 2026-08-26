@@ -6,37 +6,21 @@ Two PRs, one per branch. They are independent and can land in either order.
 
 ---
 
-## Step 0a — Where to run this, and the credential tradeoff
+## Step 0a — Where to run this
 
-Plans 1 and 2 run in the isolated `quicken-test` account. Plan 3 needs no
-Quicken database, so you have a choice — and it is a security choice, not a
-convenience one.
+Run plan 3 from your **normal working volume**, with your usual account and an
+authenticated `gh`. Nothing here touches a Quicken database, so none of the
+isolation from plans 0–2 applies, and no privilege restrictions are assumed.
 
-Opening a PR with `gh` requires GitHub credentials with write access to your
-fork. `gh auth login` stores that token in the login keychain (or, depending
-on setup, in plaintext at `~/.config/gh/hosts.yml`). Putting it in the same
-account where untrusted `npm` install scripts just ran gives that code a path
-to a credential that can push to your repositories — which partly undoes the
-reason for the isolated account.
+One carry-over from that setup: do not authenticate `gh` inside the
+`quicken-test` account. A token with write access to your repositories does
+not belong in the account where untrusted `npm` install scripts ran.
 
-Three options, best first:
+If you ever do want to open these PRs from a machine or account without `gh`,
+the branches are already pushed, so a browser works just as well:
 
-1. **Open the PRs in a browser, from the test account. No token anywhere.**
-   The branches are already pushed, so a PR is just a URL:
-
-   - https://github.com/dweekly/quicken-mac-mcp/compare/main...apisani1:quicken-mac-mcp:fix/raw-query-hardening?expand=1
-   - https://github.com/dweekly/quicken-mac-mcp/compare/main...apisani1:quicken-mac-mcp:fix/sanitize-error-paths?expand=1
-
-   Paste the title and body from the sections below into the web form. To
-   target your own fork instead, swap `dweekly` for `apisani1` in the URL.
-
-2. **Run plan 3 from the administrator account or the main volume.** Nothing
-   in it touches the database, and `gh` is likely already authenticated there.
-
-3. **Use `gh` in the test account with a fine-grained token** scoped to just
-   `apisani1/quicken-mac-mcp` with pull-request write. Revoke it afterwards.
-
-Avoid authenticating a broadly-scoped GitHub account inside `quicken-test`.
+- https://github.com/dweekly/quicken-mac-mcp/compare/main...apisani1:quicken-mac-mcp:fix/raw-query-hardening?expand=1
+- https://github.com/dweekly/quicken-mac-mcp/compare/main...apisani1:quicken-mac-mcp:fix/sanitize-error-paths?expand=1
 
 ## Step 0 — Decide the target repository
 

@@ -5,19 +5,25 @@ Working plans for finishing the security-review follow-up on
 
 | # | Plan | Where | What it gets you |
 |---|------|-------|------------------|
-| 0 | [0-prerequisites.md](0-prerequisites.md) | Secure Space (admin + test account) | A non-admin `quicken-test` account, the repo, and the native module ready |
-| 1 | [1-test-branches-separately.md](1-test-branches-separately.md) | `quicken-test` | Each fix branch validated against a real Quicken database, on its own |
-| 2 | [2-test-combined-branch.md](2-test-combined-branch.md) | `quicken-test` | A throwaway merge of both branches, tested together, then deleted |
-| 3 | [3-open-pull-requests.md](3-open-pull-requests.md) | `quicken-test` (browser) or main volume | The two PRs opened, with descriptions and review notes |
-| 4 | [4-tokenizer-and-statement-policy.md](4-tokenizer-and-statement-policy.md) | Either | The two deliberately-deferred findings addressed |
+| 0 | [0-prerequisites.md](0-prerequisites.md) | Secure Space, `quicken-test` | A non-admin test account, the repo, and the native module ready |
+| 1 | [1-test-branches-separately.md](1-test-branches-separately.md) | Secure Space, `quicken-test` | Each fix branch validated against a real Quicken database, on its own |
+| 2 | [2-test-combined-branch.md](2-test-combined-branch.md) | Secure Space, `quicken-test` | A throwaway merge of both branches, tested together, then deleted |
+| 3 | [3-open-pull-requests.md](3-open-pull-requests.md) | Main volume, normal account | The two PRs opened, with descriptions and review notes |
+| 4 | [4-tokenizer-and-statement-policy.md](4-tokenizer-and-statement-policy.md) | Main volume, normal account | The two deliberately-deferred findings addressed |
 
-Plans 0–3 are sequential. They run on the **Secure Space** volume, inside a
-dedicated non-admin `quicken-test` account, so that `npm` install scripts and
-the test suite never run with administrator privileges — see the threat model
-in plan 0. Plan 3 needs no database and can be done from a browser in that
-account, or from the main volume; plan 0 step 0a explains why that choice
-matters. Plan 4 is independent design work and can happen any time after plan
-3 — it is a follow-up PR, not a blocker.
+Plans 0–3 are sequential, and they split across two environments:
+
+- **Plans 0, 1 and 2** run on the **Secure Space** volume, inside a dedicated
+  non-admin `quicken-test` account. That is where Quicken and the real
+  database live, and confining `npm` install scripts and the test suite to a
+  standard account keeps untrusted package code away from the administrator
+  account — see the threat model in plan 0.
+- **Plan 3** runs on your **normal working volume**, with your usual account
+  and an authenticated `gh`. Opening the PRs needs no database, and GitHub
+  credentials should stay out of the test account.
+
+Plan 4 is independent design work, still TBD, and assumes the same normal
+environment as plan 3. It is a follow-up PR, not a blocker.
 
 ## The branches
 
