@@ -7,7 +7,7 @@ branch is disposable — it exists to be tested and deleted, and nothing is ever
 pushed from it.
 
 **Where this runs:** the same `quicken-test` account on Secure Space as plan
-1, with Quicken still running and the copied bundle open.
+1, with Quicken still running and the synthetic file open.
 
 Expect 15 minutes.
 

@@ -5,7 +5,7 @@ work against a real Quicken file, independently. Plan 2 tests them together.
 
 **Where this runs:** the `quicken-test` standard account on the Secure Space
 volume, set up in plan 0. Everything below assumes you are logged into that
-account with Quicken running and the copied bundle open.
+account with Quicken running and the synthetic file open.
 
 Expect 30–45 minutes, most of it waiting on `npm ci`.
 
@@ -150,21 +150,24 @@ With the live database, `skipped` should again drop to **0**.
 
 ### Extra manual check: does a real path actually get redacted?
 
-This is the whole point of the branch, and it is the one thing the unit tests
-cannot fully prove, because they use synthetic paths. Force a real error and
-look at the message:
+This is the whole point of the branch, and the one thing the unit tests cannot
+fully prove, because they use invented paths. Here the path is a real one from
+a live filesystem — and the bundle name from plan 0 has the spaces and
+parentheses that defeated the old sanitizer. Force an error and read the
+message:
 
 ```bash
-# Point at a nonexistent file inside your real directory, so the error message
-# contains a genuine path with your real folder names in it.
+# A nonexistent file inside the synthetic bundle, so the error carries a real
+# path containing "My Test Finances (2026).quicken".
 QUICKEN_DB_PATH="$HOME/Documents/My Test Finances (2026).quicken/nonexistent" \
   npx tsx src/index.ts list_accounts 2>&1 | tail -5
 ```
 
-Read the output carefully. **It must not contain your home directory, your
-username, or any folder name from the path.** You should see `<path>` or `~`
-instead. If any fragment of a real path survives, copy the exact output — that
-is a live leak the synthetic tests missed, and it needs fixing before the PR.
+Read the output carefully. **It must not contain `/Users/quicken-test`, nor
+any fragment of `My Test Finances (2026).quicken`.** You should see `<path>`
+or `~` instead. Output like `<path> Test Finances (2026).quicken` is the exact
+punctuation leak this branch fixes reappearing — copy it verbatim and report
+it, because the synthetic tests missed it.
 
 ---
 

@@ -118,6 +118,60 @@ chmod -R 700 "$HOME/Documents/My Test Finances (2026).quicken"
 
 Quote the path everywhere — it contains spaces.
 
+### Hard requirements the live tests impose
+
+Two of these are not negotiable, and both constrain which accounts and years
+you export. They come from values hard-coded in the live suites:
+
+1. **Calendar year 2024 must be covered.** `2024-01-01`, `2024-12-31` and
+   `2024-06-30` appear 22 times across the live suites, and several of those
+   assertions require non-empty results. A sample of "a limited number of
+   years" that omits 2024 will fail tests that have nothing to do with the
+   code. Exporting 2023–2025 gives 2024 plus range boundaries on either side,
+   which the narrow-date-range and newest-first-ordering tests want.
+
+2. **An account with `ZTYPENAME` of exactly `CHECKING`, holding
+   transactions.** `list_accounts` filters on it and asserts a non-empty
+   result; `query_transactions` filters `account_types: ["checking"]` and does
+   the same.
+
+3. **A credit card account with transactions dated in 2024.**
+   `spending_over_time` is asserted with `account_types: ["creditcard"]` over
+   `2024-01-01`–`2024-12-31` and expects rows back.
+
+Your plan to sample **banking, credit cards, cash, assets and brokerage** is
+more than these need, and the extra types are genuinely useful — they exercise
+account-type filtering, the sorted-by-name listing, and the cross-tool check
+that every transaction's account name appears in `list_accounts`.
+
+One thing to keep in mind while choosing volumes: the spending tools default
+to `checking` and `creditcard` only. Cash and asset accounts broaden account
+coverage but contribute nothing to the spending suites, so put the bulk of
+your transaction volume in checking and credit card accounts.
+
+Brokerage is the one type CSV alone will not deliver — see below.
+
+### What the file has to contain
+
+This is the part that decides whether plan 1 is meaningful. **46 assertions
+across 18 live suites require non-empty results**, and a sparse file makes
+them fail in ways that look like code bugs but are only missing data. Build
+for this list:
+
+| Data | Why | Suites that fail without it |
+|------|-----|------------------------------|
+| ≥1 checking **and** ≥1 credit card account | the spending tools default to those two types | `list_accounts`, both spending suites |
+| Categories, expense **and** income, with parent/child pairs | the hierarchy is asserted directly | `list_categories`, `getCategoryTagEntityId`, `category hierarchy integrity` |
+| A few hundred transactions with payees, spread over ≥2 years | date bucketing, sorting, monthly aggregation | `query_transactions`, `date handling`, `spending_over_time` |
+| Negative-amount categorized spending | every spending total | `spending_by_category`, `spending aggregation integrity` |
+| Distinct payee names | substring search | `search_payees`, `payee search` |
+| ≥1 brokerage account with securities, holdings and quotes | portfolio joins across ZLOT/ZPOSITION/ZSECURITY | `list_portfolio` (5), `portfolio data integrity` (2) |
+| Some transfers, some splits, some uncategorized, some excluded-from-reports | these are the exclusions the spending tools apply | `cross-tool consistency`, `edge cases` |
+
+The brokerage account is the fiddliest — add the account, buy a couple of
+securities, and let Quicken download or hand-enter quotes. Skipping it costs
+you 7 assertions.
+
 ### Recommended way to populate it: scrubbed CSV from your real file
 
 Hand-entering hundreds of transactions is miserable, and a hand-built file
@@ -173,6 +227,30 @@ code has a `COALESCE(ZPOSTEDDATE, ZENTEREDDATE)` fallback specifically for
 that case. `integration.test.ts` has a test that only does real work when such
 rows exist, so a CSV-built file may exercise that path better than a real one.
 
+### Then add by hand what the import could not carry
+
+Roughly 15–20 records, once. Everything above is bulk; this is the part that
+makes the file structurally complete:
+
+- [ ] **3–4 transfers** between two of the imported accounts (e.g. checking →
+      credit card payment). Enter them as real transfers in Quicken, not as
+      categorized transactions, so `ZTARGETACCOUNT`/`ZSENDACCOUNT` get set.
+- [ ] **4–5 split transactions**, at least one with both a positive and a
+      negative line, since the spending tools rely on the negative-split
+      convention.
+- [ ] **2–3 transactions flagged "exclude from reports"**, which sets
+      `ZEXCLUDEFROMREPORTS`.
+- [ ] **3–5 uncategorized transactions**, so the `(Uncategorized)` bucket both
+      spending tools emit is non-empty.
+- [ ] **1 brokerage account** with 2 securities, a couple of buy transactions
+      each so Quicken builds the lots, and quotes (downloaded or hand-entered).
+      This is the fiddliest item and the one worth 7 assertions.
+- [ ] **At least one closed account**, so the active/closed flags in
+      `list_accounts` are not uniformly identical.
+
+Do these *after* the CSV import — importing into an account you have already
+hand-edited is more error-prone than the reverse.
+
 ### Check what you actually ended up with
 
 After importing, measure the file against what the suites need — this takes
@@ -190,70 +268,27 @@ sqlite3 "$Q" "SELECT COUNT(*) AS excluded FROM ZTRANSACTION WHERE COALESCE(ZEXCL
 sqlite3 "$Q" "SELECT COUNT(*) AS lots FROM ZLOT;"
 sqlite3 "$Q" "SELECT COUNT(*) AS quotes FROM ZSECURITYQUOTE;"
 sqlite3 "$Q" "SELECT COUNT(*) AS null_posted FROM ZTRANSACTION WHERE ZPOSTEDDATE IS NULL AND ZENTEREDDATE IS NOT NULL;"
+
+# The three hard requirements, verified rather than assumed:
+sqlite3 "$Q" "SELECT COUNT(*) AS checking_accounts FROM ZACCOUNT WHERE UPPER(ZTYPENAME)='CHECKING';"
+sqlite3 "$Q" "
+  SELECT UPPER(a.ZTYPENAME) AS type, COUNT(*) AS txns_in_2024
+  FROM ZTRANSACTION t JOIN ZACCOUNT a ON t.ZACCOUNT = a.Z_PK
+  WHERE strftime('%Y', COALESCE(t.ZPOSTEDDATE, t.ZENTEREDDATE) + 978307200, 'unixepoch') = '2024'
+  GROUP BY UPPER(a.ZTYPENAME);"
 ```
+
+Required minimums, all three of which the live suites assert directly:
+
+| Check | Must be |
+|-------|---------|
+| `checking_accounts` | ≥ 1 |
+| `txns_in_2024` for `CHECKING` | ≥ 1 |
+| `txns_in_2024` for `CREDITCARD` | ≥ 1 |
 
 Every count that comes back zero tells you which suites will fail for want of
 data rather than for want of correct code. `transfers`, `splits`, `excluded`
 and `lots` are the four most likely zeros after a CSV-only import.
-
-### Hard requirements the live tests impose
-
-Two of these are not negotiable, and both constrain which accounts and years
-you export. They come from values hard-coded in the live suites:
-
-1. **Calendar year 2024 must be covered.** `2024-01-01`, `2024-12-31` and
-   `2024-06-30` appear 22 times across the live suites, and several of those
-   assertions require non-empty results. A sample of "a limited number of
-   years" that omits 2024 will fail tests that have nothing to do with the
-   code. Exporting 2023–2025 gives 2024 plus range boundaries on either side,
-   which the narrow-date-range and newest-first-ordering tests want.
-
-2. **An account with `ZTYPENAME` of exactly `CHECKING`, holding
-   transactions.** `list_accounts` filters on it and asserts a non-empty
-   result; `query_transactions` filters `account_types: ["checking"]` and does
-   the same.
-
-3. **A credit card account with transactions dated in 2024.**
-   `spending_over_time` is asserted with `account_types: ["creditcard"]` over
-   `2024-01-01`–`2024-12-31` and expects rows back.
-
-Your plan to sample **banking, credit cards, cash, assets and brokerage** is
-more than these need, and the extra types are genuinely useful — they exercise
-account-type filtering, the sorted-by-name listing, and the cross-tool check
-that every transaction's account name appears in `list_accounts`.
-
-One thing to keep in mind while choosing volumes: the spending tools default
-to `checking` and `creditcard` only. Cash and asset accounts broaden account
-coverage but contribute nothing to the spending suites, so put the bulk of
-your transaction volume in checking and credit card accounts.
-
-Brokerage is the one type CSV alone will not deliver — see below.
-
-### What the file has to contain
-
-This is the part that decides whether plan 1 is meaningful. **46 assertions
-across 18 live suites require non-empty results**, and a sparse file makes
-them fail in ways that look like code bugs but are only missing data. Build
-for this list:
-
-| Data | Why | Suites that fail without it |
-|------|-----|------------------------------|
-| ≥1 checking **and** ≥1 credit card account | the spending tools default to those two types | `list_accounts`, both spending suites |
-| Categories, expense **and** income, with parent/child pairs | the hierarchy is asserted directly | `list_categories`, `getCategoryTagEntityId`, `category hierarchy integrity` |
-| A few hundred transactions with payees, spread over ≥2 years | date bucketing, sorting, monthly aggregation | `query_transactions`, `date handling`, `spending_over_time` |
-| Negative-amount categorized spending | every spending total | `spending_by_category`, `spending aggregation integrity` |
-| Distinct payee names | substring search | `search_payees`, `payee search` |
-| ≥1 brokerage account with securities, holdings and quotes | portfolio joins across ZLOT/ZPOSITION/ZSECURITY | `list_portfolio` (5), `portfolio data integrity` (2) |
-| Some transfers, some splits, some uncategorized, some excluded-from-reports | these are the exclusions the spending tools apply | `cross-tool consistency`, `edge cases` |
-
-The brokerage account is the fiddliest — add the account, buy a couple of
-securities, and let Quicken download or hand-enter quotes. Skipping it costs
-you 7 assertions.
-
-If you want to exceed 500 transactions without hand-entry, Quicken's
-**File → Import** accepts QIF/CSV depending on account type; generating a file
-of invented transactions is far faster than typing them. Verify what your
-Quicken version accepts before investing time in generating one.
 
 ### What a synthetic file cannot tell you
 
