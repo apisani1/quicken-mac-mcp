@@ -5,16 +5,19 @@ Working plans for finishing the security-review follow-up on
 
 | # | Plan | Where | What it gets you |
 |---|------|-------|------------------|
-| 0 | [0-prerequisites.md](0-prerequisites.md) | Secure Space | Node, git, the repo, and the native module ready to go |
-| 1 | [1-test-branches-separately.md](1-test-branches-separately.md) | Secure Space | Each fix branch validated against a real Quicken database, on its own |
-| 2 | [2-test-combined-branch.md](2-test-combined-branch.md) | Secure Space | A throwaway merge of both branches, tested together, then deleted |
-| 3 | [3-open-pull-requests.md](3-open-pull-requests.md) | Main volume | The two PRs opened, with descriptions and review notes |
+| 0 | [0-prerequisites.md](0-prerequisites.md) | Secure Space (admin + test account) | A non-admin `quicken-test` account, the repo, and the native module ready |
+| 1 | [1-test-branches-separately.md](1-test-branches-separately.md) | `quicken-test` | Each fix branch validated against a real Quicken database, on its own |
+| 2 | [2-test-combined-branch.md](2-test-combined-branch.md) | `quicken-test` | A throwaway merge of both branches, tested together, then deleted |
+| 3 | [3-open-pull-requests.md](3-open-pull-requests.md) | `quicken-test` (browser) or main volume | The two PRs opened, with descriptions and review notes |
 | 4 | [4-tokenizer-and-statement-policy.md](4-tokenizer-and-statement-policy.md) | Either | The two deliberately-deferred findings addressed |
 
-Plans 0–3 are sequential. Plans 0–2 run on the **Secure Space** volume, where
-Quicken and the real database live; plan 3 runs on the **main** volume, since
-opening the PRs needs no Quicken database. Plan 4 is independent design work
-and can happen any time after plan 3 — it is a follow-up PR, not a blocker.
+Plans 0–3 are sequential. They run on the **Secure Space** volume, inside a
+dedicated non-admin `quicken-test` account, so that `npm` install scripts and
+the test suite never run with administrator privileges — see the threat model
+in plan 0. Plan 3 needs no database and can be done from a browser in that
+account, or from the main volume; plan 0 step 0a explains why that choice
+matters. Plan 4 is independent design work and can happen any time after plan
+3 — it is a follow-up PR, not a blocker.
 
 ## The branches
 

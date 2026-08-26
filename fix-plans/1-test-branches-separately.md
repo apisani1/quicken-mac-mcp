@@ -33,23 +33,27 @@ is the `data` file inside it:
                              ^^^^ this is what QUICKEN_DB_PATH points to
 ```
 
-### Work on a copy
+### Work on a copy, in the `quicken-test` account
 
-Do not point the test run at your only copy. The tests open the database
-read-only, but Quicken itself will be opening and possibly upgrading whatever
-file you hand it.
+Plan 0 step 3 already staged the copy into the test account's home. If you
+followed it, the path is:
 
 ```bash
-# 1. Quit Quicken first, so the bundle is not mid-write.
-QUICKEN_SRC="/full/path/to/My Finances.quicken"     # <- edit this
-cp -R "$QUICKEN_SRC" "$HOME/quicken-test-copy.quicken"
-
-# 2. Launch Quicken and open the COPY:  File → Open → ~/quicken-test-copy.quicken
-#    Leave Quicken running for the whole test session. Closing it re-encrypts
-#    the database and every live suite will fail.
-
 export QUICKEN_DB_PATH="$HOME/quicken-test-copy.quicken/data"
 ```
+
+Two reminders from plan 0, because everything below depends on them:
+
+- Quicken must be **running in the `quicken-test` session** with
+  `~/quicken-test-copy.quicken` open. Closed Quicken means an encrypted stub
+  and every live suite fails.
+- Never point `QUICKEN_DB_PATH` at your original bundle. The tests open the
+  database read-only, but Quicken itself will open and possibly upgrade
+  whatever file you hand it.
+
+Searching for the original bundle (the commands above) has to be done from the
+account that owns it — `mdfind` as `quicken-test` will not see the
+administrator's files.
 
 ### Verify before running anything
 

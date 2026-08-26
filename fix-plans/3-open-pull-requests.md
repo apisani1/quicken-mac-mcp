@@ -6,6 +6,38 @@ Two PRs, one per branch. They are independent and can land in either order.
 
 ---
 
+## Step 0a — Where to run this, and the credential tradeoff
+
+Plans 1 and 2 run in the isolated `quicken-test` account. Plan 3 needs no
+Quicken database, so you have a choice — and it is a security choice, not a
+convenience one.
+
+Opening a PR with `gh` requires GitHub credentials with write access to your
+fork. `gh auth login` stores that token in the login keychain (or, depending
+on setup, in plaintext at `~/.config/gh/hosts.yml`). Putting it in the same
+account where untrusted `npm` install scripts just ran gives that code a path
+to a credential that can push to your repositories — which partly undoes the
+reason for the isolated account.
+
+Three options, best first:
+
+1. **Open the PRs in a browser, from the test account. No token anywhere.**
+   The branches are already pushed, so a PR is just a URL:
+
+   - https://github.com/dweekly/quicken-mac-mcp/compare/main...apisani1:quicken-mac-mcp:fix/raw-query-hardening?expand=1
+   - https://github.com/dweekly/quicken-mac-mcp/compare/main...apisani1:quicken-mac-mcp:fix/sanitize-error-paths?expand=1
+
+   Paste the title and body from the sections below into the web form. To
+   target your own fork instead, swap `dweekly` for `apisani1` in the URL.
+
+2. **Run plan 3 from the administrator account or the main volume.** Nothing
+   in it touches the database, and `gh` is likely already authenticated there.
+
+3. **Use `gh` in the test account with a fine-grained token** scoped to just
+   `apisani1/quicken-mac-mcp` with pull-request write. Revoke it afterwards.
+
+Avoid authenticating a broadly-scoped GitHub account inside `quicken-test`.
+
 ## Step 0 — Decide the target repository
 
 This checkout has two remotes:
