@@ -3,15 +3,18 @@
 Working plans for finishing the security-review follow-up on
 `quicken-mac-mcp`. Use them **in numbered order**.
 
-| # | Plan | What it gets you |
-|---|------|------------------|
-| 1 | [1-test-branches-separately.md](1-test-branches-separately.md) | Each fix branch validated against a real Quicken database, on its own |
-| 2 | [2-test-combined-branch.md](2-test-combined-branch.md) | A throwaway merge of both branches, tested together, then deleted |
-| 3 | [3-open-pull-requests.md](3-open-pull-requests.md) | The two PRs opened, with descriptions and review notes |
-| 4 | [4-tokenizer-and-statement-policy.md](4-tokenizer-and-statement-policy.md) | The two deliberately-deferred findings addressed |
+| # | Plan | Where | What it gets you |
+|---|------|-------|------------------|
+| 0 | [0-prerequisites.md](0-prerequisites.md) | Secure Space | Node, git, the repo, and the native module ready to go |
+| 1 | [1-test-branches-separately.md](1-test-branches-separately.md) | Secure Space | Each fix branch validated against a real Quicken database, on its own |
+| 2 | [2-test-combined-branch.md](2-test-combined-branch.md) | Secure Space | A throwaway merge of both branches, tested together, then deleted |
+| 3 | [3-open-pull-requests.md](3-open-pull-requests.md) | Main volume | The two PRs opened, with descriptions and review notes |
+| 4 | [4-tokenizer-and-statement-policy.md](4-tokenizer-and-statement-policy.md) | Either | The two deliberately-deferred findings addressed |
 
-Plans 1–3 are sequential. Plan 4 is independent design work and can happen
-any time after plan 3 — it is a follow-up PR, not a blocker for the first two.
+Plans 0–3 are sequential. Plans 0–2 run on the **Secure Space** volume, where
+Quicken and the real database live; plan 3 runs on the **main** volume, since
+opening the PRs needs no Quicken database. Plan 4 is independent design work
+and can happen any time after plan 3 — it is a follow-up PR, not a blocker.
 
 ## The branches
 
