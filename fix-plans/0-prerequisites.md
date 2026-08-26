@@ -501,11 +501,18 @@ Transfer **only the text results** — never the database copy.
 Plans 1 and 2 write to `~/results-hardening.txt`, `~/results-sanitize.txt` and
 `~/results-combined.txt` inside the test account. To move them:
 
+Do not stage them in `/Users/Shared` either — same reason as the CSV handover
+in step 3. Pull them from the administrator side instead, which needs no
+world-readable middle ground:
+
 ```bash
-cp ~/results-*.txt /Users/Shared/          # readable from the admin account
+# As the administrator, after logging out of quicken-test:
+sudo cp /Users/quicken-test/results-*.txt ~/
+sudo chown "$(whoami)" ~/results-*.txt
 ```
 
-and delete them from `/Users/Shared` once collected. What actually matters is
+Test output is not sensitive in itself, but it can quote error messages — and
+the whole point of one of these branches is what error messages contain. What actually matters is
 short enough to paste by hand: the final `Tests` line, any failure output, and
 the results of the manual checks in plan 1 and plan 2.
 

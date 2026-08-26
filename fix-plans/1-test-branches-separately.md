@@ -7,7 +7,8 @@ work against a real Quicken file, independently. Plan 2 tests them together.
 volume, set up in plan 0. Everything below assumes you are logged into that
 account with Quicken running and the synthetic file open.
 
-Expect 30–45 minutes, most of it waiting on `npm ci`.
+Expect 20–30 minutes. Dependencies are already installed from plan 0, so
+most of the time is the test runs themselves.
 
 ---
 
@@ -82,7 +83,6 @@ the single install from plan 0 covers every branch you check out below. Re-run
 From the repo, with `QUICKEN_DB_PATH` exported:
 
 ```bash
-npm ci
 node scripts/report-live-test-status.mjs; echo "exit=$?"
 ```
 
